@@ -19,14 +19,21 @@ Diagnose slow Rust builds and get ranked, actionable prescriptions. `cargo clini
 - **Auto-applying fixes**: we prescribe, the user operates
 - **TUI in v0.1**: CLI table + `--json` + markdown only; value is analysis correctness
 
-## Commands
+## Build & Run
 
+```bash
+rustup default stable
+cargo install cargo-nextest just
+
+just verify    # primary local gate: check (fmt+clippy+build) + nextest. Run before merge.
+just check     # fmt + clippy + build
+just test      # nextest
+just build
 ```
-cargo build --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all --check
-```
+
+## Verification
+
+The primary merge gate is **`just verify` locally**; GitHub Actions CI mirrors the exact same gate (public-OSS trust signal — see ADR-0003 for why this diverges from avatar-core's PoC no-CI stance). If `just verify` is green, the change is mergeable.
 
 ## Architecture
 
@@ -56,11 +63,23 @@ tests/fixtures/    # mini cargo workspaces with planted problems (dup versions, 
 - Adjacent tools to integrate/credit, not compete with: `cargo tree -d`, `cargo-llvm-lines`, `cargo-hakari`, `cargo-bloat`, sccache
 - Dogfooding target: the agent-witness workspace (sibling project) — its build is our first patient
 
-## Development Process
+## Rust Conventions
 
-- AI-driven: issues are Dev Ready; use `/dev` per issue, `/dev-all` for batches. Human judgment points: finding taxonomy, prescription wording, launch copy
-- Every PR includes a short design-decision note (launch article material)
-- No squash merges; incremental history is part of the public ownership story
+- `just check` must pass (fmt, clippy `-D warnings`, build); tests via nextest.
+- No `unsafe`. Determinism in core logic: no wall-clock or RNG inside pure paths — inject them.
+- No magic numbers; errors via `thiserror` in lib crates, `anyhow` in bins; no `unwrap`/`expect` outside tests.
+
+## Development Harness
+
+Issue-driven development with `/dev` (single issue) and `/dev-all` (sequential). Other skills: `/audit`, `/update-docs`, `/decompose`, `/investigate`, `/review`, `/tech-debt`, `/pr`.
+
+Review accumulation (ADR-0003): valid review findings are promoted into rules (`.claude/rules/`), lints, and skills. Promotion: a finding that recurs twice becomes a rule. Retirement: a rule unused for 3 months is removed.
+
+Human judgment points: event/report schema changes, CLI surface, launch copy. Every PR includes a short design-decision note (launch article material). No squash merges.
+
+## Phasing
+
+Design is decided ahead (docs/adr/, zero-base design docs), but implementation may diverge. v0.1 issues are fully detailed; v0.2+ exist only as ADR notes and are detailed at the v0.1 gate. The v0.1 gate is a human decision after the first vertical spike (calibrate actual pace; shrink scope if estimates double).
 
 ## Language
 

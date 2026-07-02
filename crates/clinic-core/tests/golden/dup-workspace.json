@@ -1,0 +1,96 @@
+{
+  "finding_count": 3,
+  "disclaimer": "Impact is qualitative (likely / possible). This report makes no build-time predictions; measure before/after in your own environment to confirm any change.",
+  "findings": [
+    {
+      "kind": "duplicate-versions",
+      "impact": "likely",
+      "title": "Duplicate versions of `leftpad`",
+      "diagnosis": "`leftpad` is resolved to 2 different versions (0.1.0, 0.2.0). Each version is compiled separately, so the crate and its unique transitive dependencies are built more than once.",
+      "evidence": [
+        "v0.1.0 required by app-a",
+        "  path: app-a -> leftpad",
+        "v0.2.0 required by mid",
+        "  path: app-b -> mid -> leftpad"
+      ],
+      "prescription": {
+        "steps": [
+          "Run `cargo tree -d -i leftpad` to see every path that pulls in each version.",
+          "Align the requirements: bump the crate(s) pinning the older version, or relax an over-tight `=`/`~` requirement, so all dependents can share one version.",
+          "If a direct dependency pins the old `leftpad`, update that dependency (or its parent) to a release that accepts the newer version.",
+          "Re-run `cargo clinic report` (or `cargo tree -d`) to confirm the duplicate is gone."
+        ],
+        "next_tool": {
+          "name": "cargo tree -d -i",
+          "purpose": "list duplicate versions and the exact paths that require each one",
+          "url": "https://doc.rust-lang.org/cargo/commands/cargo-tree.html"
+        },
+        "references": [
+          {
+            "label": "The Cargo Book — Dependency resolution",
+            "url": "https://doc.rust-lang.org/cargo/reference/resolver.html"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "duplicate-versions",
+      "impact": "likely",
+      "title": "Duplicate versions of `numparse`",
+      "diagnosis": "`numparse` is resolved to 2 different versions (1.0.0, 2.0.0). Each version is compiled separately, so the crate and its unique transitive dependencies are built more than once.",
+      "evidence": [
+        "v1.0.0 required by app-a",
+        "  path: app-a -> numparse",
+        "v2.0.0 required by app-b",
+        "  path: app-b -> numparse"
+      ],
+      "prescription": {
+        "steps": [
+          "Run `cargo tree -d -i numparse` to see every path that pulls in each version.",
+          "Align the requirements: bump the crate(s) pinning the older version, or relax an over-tight `=`/`~` requirement, so all dependents can share one version.",
+          "If a direct dependency pins the old `numparse`, update that dependency (or its parent) to a release that accepts the newer version.",
+          "Re-run `cargo clinic report` (or `cargo tree -d`) to confirm the duplicate is gone."
+        ],
+        "next_tool": {
+          "name": "cargo tree -d -i",
+          "purpose": "list duplicate versions and the exact paths that require each one",
+          "url": "https://doc.rust-lang.org/cargo/commands/cargo-tree.html"
+        },
+        "references": [
+          {
+            "label": "The Cargo Book — Dependency resolution",
+            "url": "https://doc.rust-lang.org/cargo/reference/resolver.html"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "workspace-hack",
+      "impact": "possible",
+      "title": "Workspace feature unification (consider a workspace-hack)",
+      "diagnosis": "This workspace has 3 members. Building individual members (e.g. `cargo build -p …`) can compile shared dependencies with different feature sets, causing redundant rebuilds.",
+      "evidence": [
+        "3 workspace members",
+        "duplicate versions present, which compounds feature-driven rebuilds"
+      ],
+      "prescription": {
+        "steps": [
+          "Adopt `cargo-hakari` to generate a `workspace-hack` crate that unifies dependency features across the whole workspace.",
+          "Install and set up: `cargo install cargo-hakari`, then `cargo hakari init`, `cargo hakari generate`, and `cargo hakari manage-deps`.",
+          "Add `cargo hakari generate --diff` to CI so the hack crate stays current."
+        ],
+        "next_tool": {
+          "name": "cargo-hakari",
+          "purpose": "generate and maintain a workspace-hack crate for feature unification",
+          "url": "https://docs.rs/cargo-hakari"
+        },
+        "references": [
+          {
+            "label": "cargo-hakari — About workspace-hack crates",
+            "url": "https://docs.rs/cargo-hakari/latest/cargo_hakari/"
+          }
+        ]
+      }
+    }
+  ]
+}

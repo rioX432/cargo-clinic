@@ -1,0 +1,84 @@
+{
+  "finding_count": 3,
+  "disclaimer": "Impact is qualitative (likely / possible). This report makes no build-time predictions; measure before/after in your own environment to confirm any change.",
+  "findings": [
+    {
+      "kind": "default-features",
+      "impact": "possible",
+      "title": "Default features enabled on `featured`",
+      "diagnosis": "`app` depends on `featured` with default features left on; its `default` feature turns on: extra. If those features are unused, they add compile work for no benefit.",
+      "evidence": [
+        "declared in `app`'s Cargo.toml",
+        "`featured` default expands to: extra"
+      ],
+      "prescription": {
+        "steps": [
+          "Confirm the default features are actually unused: `cargo tree -e features -i featured` shows what enables each feature.",
+          "In `app`'s Cargo.toml set `default-features = false` for `featured`, then re-add only the features you use: `featured = { version = \"…\", default-features = false, features = [\"…\"] }`.",
+          "Build and test to confirm nothing you rely on was behind a default feature."
+        ],
+        "next_tool": {
+          "name": "cargo tree -e features -i",
+          "purpose": "trace which crate or feature enables each default feature",
+          "url": "https://doc.rust-lang.org/cargo/commands/cargo-tree.html"
+        },
+        "references": [
+          {
+            "label": "The Cargo Book — Features",
+            "url": "https://doc.rust-lang.org/cargo/reference/features.html"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "proc-macro",
+      "impact": "possible",
+      "title": "Proc-macro crates in the build graph",
+      "diagnosis": "1 proc-macro crate(s) are compiled and executed at build time. Proc-macros run during every compile of their dependents and can dominate front-end time.",
+      "evidence": [
+        "mymacro v0.1.0 <- app"
+      ],
+      "prescription": {
+        "steps": [
+          "Check whether each proc-macro is essential; some derives have lighter alternatives, or can be replaced by a hand-written impl in hot crates.",
+          "Measure front-end cost with `cargo llvm-lines` before removing anything — inspect, do not guess.",
+          "Keep proc-macro-heavy dependencies in a stable lower layer so they are not recompiled when your own code changes."
+        ],
+        "next_tool": {
+          "name": "cargo-llvm-lines",
+          "purpose": "reveal which generic and macro-generated code expands the most",
+          "url": "https://github.com/dtolnay/cargo-llvm-lines"
+        },
+        "references": [
+          {
+            "label": "The Rust Performance Book — Compile times",
+            "url": "https://nnethercote.github.io/perf-book/compile-times.html"
+          }
+        ]
+      }
+    },
+    {
+      "kind": "build-script",
+      "impact": "possible",
+      "title": "Build scripts (build.rs) in the build graph",
+      "diagnosis": "1 crate(s) run a build script. build.rs runs at build time and is INVISIBLE to RUSTC_WRAPPER timing, so its cost never appears in measured rustc numbers.",
+      "evidence": [
+        "builder-dep v0.1.0 <- app"
+      ],
+      "prescription": {
+        "steps": [
+          "Confirm each build script is required; some exist only for optional features you may not use.",
+          "Prefer crates that gate native or codegen build scripts behind features, and disable those features when unused.",
+          "For your own build scripts, cache expensive work and emit precise `cargo:rerun-if-changed` lines so they do not re-run needlessly."
+        ],
+        "next_tool": null,
+        "references": [
+          {
+            "label": "The Cargo Book — Build scripts",
+            "url": "https://doc.rust-lang.org/cargo/reference/build-scripts.html"
+          }
+        ]
+      }
+    }
+  ]
+}

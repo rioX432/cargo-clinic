@@ -1,0 +1,73 @@
+# cargo clinic report
+
+_3 finding(s). Impact is qualitative (likely / possible). This report makes no build-time predictions; measure before/after in your own environment to confirm any change._
+
+## 1. [LIKELY] Duplicate versions of `leftpad`
+
+**Diagnosis:** `leftpad` is resolved to 2 different versions (0.1.0, 0.2.0). Each version is compiled separately, so the crate and its unique transitive dependencies are built more than once.
+
+**Evidence:**
+
+- v0.1.0 required by app-a
+-   path: app-a -> leftpad
+- v0.2.0 required by mid
+-   path: app-b -> mid -> leftpad
+
+**Prescription:**
+
+1. Run `cargo tree -d -i leftpad` to see every path that pulls in each version.
+2. Align the requirements: bump the crate(s) pinning the older version, or relax an over-tight `=`/`~` requirement, so all dependents can share one version.
+3. If a direct dependency pins the old `leftpad`, update that dependency (or its parent) to a release that accepts the newer version.
+4. Re-run `cargo clinic report` (or `cargo tree -d`) to confirm the duplicate is gone.
+
+**Next tool:** [cargo tree -d -i](https://doc.rust-lang.org/cargo/commands/cargo-tree.html) — list duplicate versions and the exact paths that require each one
+
+**References:**
+
+- [The Cargo Book — Dependency resolution](https://doc.rust-lang.org/cargo/reference/resolver.html)
+
+## 2. [LIKELY] Duplicate versions of `numparse`
+
+**Diagnosis:** `numparse` is resolved to 2 different versions (1.0.0, 2.0.0). Each version is compiled separately, so the crate and its unique transitive dependencies are built more than once.
+
+**Evidence:**
+
+- v1.0.0 required by app-a
+-   path: app-a -> numparse
+- v2.0.0 required by app-b
+-   path: app-b -> numparse
+
+**Prescription:**
+
+1. Run `cargo tree -d -i numparse` to see every path that pulls in each version.
+2. Align the requirements: bump the crate(s) pinning the older version, or relax an over-tight `=`/`~` requirement, so all dependents can share one version.
+3. If a direct dependency pins the old `numparse`, update that dependency (or its parent) to a release that accepts the newer version.
+4. Re-run `cargo clinic report` (or `cargo tree -d`) to confirm the duplicate is gone.
+
+**Next tool:** [cargo tree -d -i](https://doc.rust-lang.org/cargo/commands/cargo-tree.html) — list duplicate versions and the exact paths that require each one
+
+**References:**
+
+- [The Cargo Book — Dependency resolution](https://doc.rust-lang.org/cargo/reference/resolver.html)
+
+## 3. [POSSIBLE] Workspace feature unification (consider a workspace-hack)
+
+**Diagnosis:** This workspace has 3 members. Building individual members (e.g. `cargo build -p …`) can compile shared dependencies with different feature sets, causing redundant rebuilds.
+
+**Evidence:**
+
+- 3 workspace members
+- duplicate versions present, which compounds feature-driven rebuilds
+
+**Prescription:**
+
+1. Adopt `cargo-hakari` to generate a `workspace-hack` crate that unifies dependency features across the whole workspace.
+2. Install and set up: `cargo install cargo-hakari`, then `cargo hakari init`, `cargo hakari generate`, and `cargo hakari manage-deps`.
+3. Add `cargo hakari generate --diff` to CI so the hack crate stays current.
+
+**Next tool:** [cargo-hakari](https://docs.rs/cargo-hakari) — generate and maintain a workspace-hack crate for feature unification
+
+**References:**
+
+- [cargo-hakari — About workspace-hack crates](https://docs.rs/cargo-hakari/latest/cargo_hakari/)
+

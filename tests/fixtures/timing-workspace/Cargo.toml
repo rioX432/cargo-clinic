@@ -1,0 +1,7 @@
+# Timing integration-test fixture: a minimal, dependency-free workspace that
+# compiles fast on CI. `app` depends on `leaf`, so a real `cargo build` invokes
+# rustc for both crates — enough for the RUSTC_WRAPPER shim to record per-crate
+# timing. See crates/cargo-clinic/tests/measure_timing.rs.
+[workspace]
+resolver = "2"
+members = ["leaf", "app"]

@@ -1,0 +1,9 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Depend on `leaf` so the build compiles both crates via rustc.
+leaf = { path = "../leaf" }

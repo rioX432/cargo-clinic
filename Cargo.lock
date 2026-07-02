@@ -74,6 +74,7 @@ dependencies = [
  "anyhow",
  "cargo-clinic-core",
  "clap",
+ "serde_json",
 ]
 
 [[package]]

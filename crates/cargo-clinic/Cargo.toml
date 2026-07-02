@@ -10,3 +10,4 @@ repository.workspace = true
 cargo-clinic-core = { path = "../clinic-core" }
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
+serde_json.workspace = true

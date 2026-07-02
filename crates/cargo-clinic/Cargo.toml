@@ -5,6 +5,7 @@ description = "Diagnose slow Rust builds and get ranked, actionable prescription
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 cargo-clinic-core = { path = "../clinic-core" }

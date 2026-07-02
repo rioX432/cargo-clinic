@@ -1,0 +1,14 @@
+[package]
+name = "lean"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Has a non-empty default feature too, but app opts out with
+# `default-features = false`, so this crate must NOT be reported.
+[features]
+default = ["heavy"]
+heavy = []
+
+# Standalone workspace root (see mymacro for rationale).
+[workspace]

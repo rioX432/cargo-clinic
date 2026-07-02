@@ -1,0 +1,17 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# proc-macro dependency
+mymacro = { path = "../vendor/mymacro" }
+# build-script-owning dependency
+builder-dep = { path = "../vendor/builder-dep" }
+# default features left ON, and the crate has a non-empty default feature:
+# this must be reported as a (possible) default-features opportunity.
+featured = { path = "../vendor/featured" }
+# default features turned OFF: must NOT be reported even though `lean`
+# defines a default feature.
+lean = { path = "../vendor/lean", default-features = false }

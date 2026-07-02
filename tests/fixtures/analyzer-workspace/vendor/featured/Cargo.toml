@@ -1,0 +1,14 @@
+[package]
+name = "featured"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Non-empty default feature set: app keeps it on, so this crate must be
+# reported as a (possible) default-features opportunity.
+[features]
+default = ["extra"]
+extra = []
+
+# Standalone workspace root (see mymacro for rationale).
+[workspace]

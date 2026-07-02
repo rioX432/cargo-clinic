@@ -1,0 +1,13 @@
+[package]
+name = "mymacro"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# proc-macro crate: this is what the proc-macro inventory must detect.
+[lib]
+proc-macro = true
+
+# Standalone workspace root so the crate resolves independently and does not
+# attach to any ancestor workspace.
+[workspace]

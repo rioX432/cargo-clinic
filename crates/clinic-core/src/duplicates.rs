@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::model::{DependencyGraph, Package, PackageId};
+use crate::model::{DependencyGraph, Package, PackageId, PackageRef};
 
 /// Minimum distinct versions of one crate name for it to count as duplicated.
 const DUPLICATE_MIN_VERSIONS: usize = 2;
@@ -33,27 +33,6 @@ pub struct DuplicateInstance {
     /// with no further dependents, i.e. top-level / workspace members). Each
     /// path starts at this instance and ends at a root.
     pub inverse_paths: Vec<Vec<PackageRef>>,
-}
-
-/// Lightweight reference to a package for reporting.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PackageRef {
-    /// Crate name.
-    pub name: String,
-    /// Resolved version.
-    pub version: String,
-    /// Opaque unique identifier.
-    pub id: PackageId,
-}
-
-impl From<&Package> for PackageRef {
-    fn from(pkg: &Package) -> Self {
-        PackageRef {
-            name: pkg.name.clone(),
-            version: pkg.version.clone(),
-            id: pkg.id.clone(),
-        }
-    }
 }
 
 impl DependencyGraph {

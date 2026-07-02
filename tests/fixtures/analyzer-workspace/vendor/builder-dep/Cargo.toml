@@ -1,0 +1,11 @@
+[package]
+name = "builder-dep"
+version = "0.1.0"
+edition = "2021"
+publish = false
+# Explicit build script so cargo emits a `custom-build` target that the
+# build-script inventory must detect.
+build = "build.rs"
+
+# Standalone workspace root (see mymacro for rationale).
+[workspace]

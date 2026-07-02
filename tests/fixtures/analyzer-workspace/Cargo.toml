@@ -1,0 +1,18 @@
+# Golden test fixture: a mini workspace with intentionally planted analyzer
+# problems. See crates/clinic-core/tests/analyzer_inventory.rs.
+#
+# Planted inventory:
+#   proc-macro:   mymacro (via app)
+#   build script: builder-dep (via app)
+#   default-features (possible-to-trim, non-empty default feature):
+#                 featured (app keeps defaults on)
+#   negative case: lean has a default feature, but app declares
+#                  default-features = false, so it must NOT be reported.
+#
+# The dependency crates live under `vendor/` and are excluded from the
+# workspace so they resolve as path dependencies without being built by the
+# outer workspace.
+[workspace]
+resolver = "2"
+members = ["app"]
+exclude = ["vendor"]

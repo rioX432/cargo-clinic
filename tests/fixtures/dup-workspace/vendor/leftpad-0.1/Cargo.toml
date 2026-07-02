@@ -1,0 +1,9 @@
+[package]
+name = "leftpad"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Standalone workspace root so the crate resolves on its own
+# (single-crate target) and does not attach to any ancestor workspace.
+[workspace]

@@ -1,0 +1,9 @@
+[package]
+name = "app-a"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+leftpad = { path = "../vendor/leftpad-0.1" }
+numparse = { path = "../vendor/numparse-1.0" }

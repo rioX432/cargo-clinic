@@ -1,0 +1,15 @@
+# Golden test fixture: a mini workspace with intentionally planted duplicate
+# versions. See crates/clinic-core/tests/dup_detection.rs.
+#
+# Planted duplicates:
+#   leftpad  0.1.0 (via app-a)          / 0.2.0 (via app-b -> mid)
+#   numparse 1.0.0 (via app-a)          / 2.0.0 (via app-b)
+#
+# The duplicated crates live under `vendor/` and are excluded from the
+# workspace so two packages can share a name with different versions
+# (workspace members must have unique names). They are still pulled into
+# the resolve graph as path dependencies.
+[workspace]
+resolver = "2"
+members = ["app-a", "app-b", "mid"]
+exclude = ["vendor"]

@@ -2,3 +2,6 @@ target/
 *.log
 .DS_Store
 .claude/worktrees/
+
+# Local dev-harness scratch (per-issue review output, etc.)
+/workspace/

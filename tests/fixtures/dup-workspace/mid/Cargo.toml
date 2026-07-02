@@ -1,0 +1,8 @@
+[package]
+name = "mid"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+leftpad = { path = "../vendor/leftpad-0.2" }

@@ -23,8 +23,9 @@ use clap::{Parser, Subcommand};
 
 use cargo_clinic_core::{
     append_invocation, crate_name_from_args, import_nightly_timings, read_invocations,
-    RustcInvocation, TimingReport,
+    MetadataCollector, Report, RustcInvocation, TimingReport,
 };
+use clap::ValueEnum;
 
 /// Environment variable that both marks shim mode and carries the JSONL log
 /// path. Set by `measure` on the child build only.
@@ -176,10 +177,34 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum ClinicCommand {
+    /// Diagnose the workspace and print ranked, prescriptive findings.
+    Report(ReportArgs),
     /// Measure per-crate rustc time by building under a RUSTC_WRAPPER shim.
     Measure(MeasureArgs),
     /// Import timing data from an external source (experimental).
     Import(ImportArgs),
+}
+
+/// Output format for `cargo clinic report`.
+#[derive(Clone, Copy, ValueEnum)]
+enum ReportFormat {
+    /// Human-readable terminal report (default).
+    Table,
+    /// Machine-readable JSON.
+    Json,
+    /// Markdown, for pasting into issues or docs.
+    Markdown,
+}
+
+#[derive(Parser)]
+struct ReportArgs {
+    /// Path to the Cargo.toml to diagnose (defaults to the current directory).
+    #[arg(long, value_name = "PATH")]
+    manifest_path: Option<PathBuf>,
+
+    /// Output format.
+    #[arg(long, value_enum, default_value_t = ReportFormat::Table)]
+    format: ReportFormat,
 }
 
 #[derive(Parser)]
@@ -214,9 +239,30 @@ struct ImportArgs {
 fn run_cli() -> Result<()> {
     let cli = Cli::parse_from(cli_args());
     match cli.command {
+        ClinicCommand::Report(args) => run_report(args),
         ClinicCommand::Measure(args) => run_measure(args),
         ClinicCommand::Import(args) => run_import(args),
     }
+}
+
+fn run_report(args: ReportArgs) -> Result<()> {
+    let graph = match &args.manifest_path {
+        Some(path) => MetadataCollector::from_manifest_path(path),
+        None => MetadataCollector::from_current_dir(),
+    }
+    .context("failed to collect cargo metadata for the report")?;
+
+    let report = Report::diagnose(&graph);
+    match args.format {
+        ReportFormat::Table => println!("{}", report.render_table()),
+        ReportFormat::Markdown => println!("{}", report.render_markdown()),
+        ReportFormat::Json => {
+            let json = serde_json::to_string_pretty(&report.view())
+                .context("failed to serialize report as JSON")?;
+            println!("{json}");
+        }
+    }
+    Ok(())
 }
 
 /// Normalize argv so clap sees a clean argument list whether we were called as

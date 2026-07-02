@@ -20,6 +20,32 @@ pub enum Impact {
     Possible,
 }
 
+impl Impact {
+    /// Stable, lowercase machine-readable identifier (used by `--json`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Impact::Likely => "likely",
+            Impact::Possible => "possible",
+        }
+    }
+
+    /// Human-facing label, upper-cased for the terminal table badge.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Impact::Likely => "LIKELY",
+            Impact::Possible => "POSSIBLE",
+        }
+    }
+
+    /// Deterministic ranking key: more certain findings sort first.
+    pub(crate) fn rank(&self) -> u8 {
+        match self {
+            Impact::Likely => 0,
+            Impact::Possible => 1,
+        }
+    }
+}
+
 /// The kind of a declared dependency, mirroring cargo's dependency kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DepKind {

@@ -2,8 +2,8 @@
 //!
 //! This binary has two roles, chosen at startup:
 //!
-//! 1. **CLI** (`cargo clinic measure` / `cargo clinic import`): the normal
-//!    subcommand surface.
+//! 1. **CLI** (`cargo clinic report` / `check` / `measure` / `import`): the
+//!    normal subcommand surface.
 //! 2. **`RUSTC_WRAPPER` shim**: when `cargo clinic measure` runs a build, it
 //!    points `RUSTC_WRAPPER` back at this same executable. Cargo then invokes
 //!    us as `cargo-clinic <rustc> <args...>` for every rustc call; in that
@@ -22,8 +22,9 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
 use cargo_clinic_core::{
-    append_invocation, crate_name_from_args, import_nightly_timings, read_invocations,
-    MetadataCollector, Report, RustcInvocation, TimingReport,
+    append_invocation, crate_name_from_args, import_nightly_timings, read_invocations, Baseline,
+    DependencyGraph, EnvironmentFingerprint, MetadataCollector, Report, RustcInvocation,
+    TimingReport, TimingSnapshot, DEFAULT_TIMING_THRESHOLD_PERCENT,
 };
 use clap::ValueEnum;
 
@@ -48,12 +49,23 @@ const DEFAULT_LOG_FILENAME: &str = "cargo-clinic-timings.jsonl";
 /// (e.g. by a signal), so we still surface a failure.
 const EXIT_TERMINATED: u8 = 1;
 
+/// Exit code returned by `cargo clinic check` when a regression is detected.
+/// Distinct from a hard error (which prints `error: ...`) so CI can tell "the
+/// tool ran and found a regression" apart from "the tool failed to run".
+const EXIT_REGRESSION: u8 = 1;
+
+/// Prefix of the `release:` line in `rustc -vV` output.
+const RUSTC_RELEASE_PREFIX: &str = "release: ";
+
+/// Prefix of the `host:` line in `rustc -vV` output.
+const RUSTC_HOST_PREFIX: &str = "host: ";
+
 fn main() -> ExitCode {
     if is_shim_invocation() {
         return run_shim();
     }
     match run_cli() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(err) => {
             eprintln!("error: {err:#}");
             ExitCode::FAILURE
@@ -179,6 +191,9 @@ struct Cli {
 enum ClinicCommand {
     /// Diagnose the workspace and print ranked, prescriptive findings.
     Report(ReportArgs),
+    /// Compare the current state against a saved baseline and fail on a
+    /// regression (CI regression gate).
+    Check(CheckArgs),
     /// Measure per-crate rustc time by building under a RUSTC_WRAPPER shim.
     Measure(MeasureArgs),
     /// Import timing data from an external source (experimental).
@@ -205,6 +220,44 @@ struct ReportArgs {
     /// Output format.
     #[arg(long, value_enum, default_value_t = ReportFormat::Table)]
     format: ReportFormat,
+
+    /// Also save a machine-readable baseline snapshot to PATH, for later
+    /// comparison with `cargo clinic check`.
+    #[arg(long, value_name = "PATH")]
+    save_baseline: Option<PathBuf>,
+
+    /// Optional RUSTC_WRAPPER timing log (from `cargo clinic measure`) to embed
+    /// in the saved baseline, enabling timing regression comparison.
+    #[arg(long, value_name = "FILE")]
+    timings: Option<PathBuf>,
+}
+
+/// Default baseline path, matching the `report --save-baseline` example.
+const DEFAULT_BASELINE_PATH: &str = ".cargo-clinic/baseline.json";
+
+#[derive(Parser)]
+struct CheckArgs {
+    /// Path to the Cargo.toml to diagnose (defaults to the current directory).
+    #[arg(long, value_name = "PATH")]
+    manifest_path: Option<PathBuf>,
+
+    /// Baseline to compare against (produced by `report --save-baseline`).
+    #[arg(long, value_name = "PATH", default_value = DEFAULT_BASELINE_PATH)]
+    baseline: PathBuf,
+
+    /// Optional RUSTC_WRAPPER timing log for THIS run; enables timing
+    /// comparison when the baseline also carries timing on the same toolchain.
+    #[arg(long, value_name = "FILE")]
+    timings: Option<PathBuf>,
+
+    /// Timing-regression threshold, as a percentage over the baseline. A crate
+    /// (or the total) must grow by more than this to count as a regression.
+    #[arg(long, value_name = "PERCENT", default_value_t = DEFAULT_TIMING_THRESHOLD_PERCENT)]
+    timing_threshold_percent: u32,
+
+    /// Emit the check result as JSON instead of a text summary.
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Parser)]
@@ -236,21 +289,74 @@ struct ImportArgs {
     json: bool,
 }
 
-fn run_cli() -> Result<()> {
+fn run_cli() -> Result<ExitCode> {
     let cli = Cli::parse_from(cli_args());
     match cli.command {
-        ClinicCommand::Report(args) => run_report(args),
-        ClinicCommand::Measure(args) => run_measure(args),
-        ClinicCommand::Import(args) => run_import(args),
+        // Most commands either succeed or return a hard error; `check` is the
+        // one that maps a non-error outcome (a regression) to a nonzero code.
+        ClinicCommand::Report(args) => run_report(args).map(|()| ExitCode::SUCCESS),
+        ClinicCommand::Check(args) => run_check(args),
+        ClinicCommand::Measure(args) => run_measure(args).map(|()| ExitCode::SUCCESS),
+        ClinicCommand::Import(args) => run_import(args).map(|()| ExitCode::SUCCESS),
     }
 }
 
-fn run_report(args: ReportArgs) -> Result<()> {
-    let graph = match &args.manifest_path {
+/// Collect a resolved dependency graph for the given manifest (or the current
+/// directory when none is provided).
+fn collect_graph(manifest_path: Option<&PathBuf>) -> Result<DependencyGraph> {
+    match manifest_path {
         Some(path) => MetadataCollector::from_manifest_path(path),
         None => MetadataCollector::from_current_dir(),
     }
-    .context("failed to collect cargo metadata for the report")?;
+    .context("failed to collect cargo metadata")
+}
+
+/// Capture the toolchain/host fingerprint from `rustc -vV`, used to gate timing
+/// comparison. Kept in the binary (it shells out) so the core stays pure.
+fn capture_environment() -> Result<EnvironmentFingerprint> {
+    let output = Command::new("rustc")
+        .arg("-vV")
+        .output()
+        .context("failed to run `rustc -vV` to fingerprint the toolchain")?;
+    if !output.status.success() {
+        bail!("`rustc -vV` exited with a failure status");
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut release = None;
+    let mut host = None;
+    for line in text.lines() {
+        if let Some(v) = line.strip_prefix(RUSTC_RELEASE_PREFIX) {
+            release = Some(v.trim().to_owned());
+        } else if let Some(v) = line.strip_prefix(RUSTC_HOST_PREFIX) {
+            host = Some(v.trim().to_owned());
+        }
+    }
+    Ok(EnvironmentFingerprint {
+        rustc_version: release.context("`rustc -vV` output had no `release:` line")?,
+        host: host.context("`rustc -vV` output had no `host:` line")?,
+    })
+}
+
+/// Build a baseline snapshot from an already-collected graph, optionally
+/// embedding timing (and its environment fingerprint) read from a wrapper log.
+/// Taking the graph as an argument avoids a second `cargo metadata` call when
+/// the caller already has one.
+fn snapshot_from_graph(graph: &DependencyGraph, timings: Option<&PathBuf>) -> Result<Baseline> {
+    let mut baseline = Baseline::from_graph(graph);
+    if let Some(log) = timings {
+        let invocations = read_invocations(log)
+            .with_context(|| format!("failed to read timing log `{}`", log.display()))?;
+        let report = TimingReport::from_wrapper_log(&invocations);
+        baseline = baseline
+            .with_timing(TimingSnapshot::from_report(&report))
+            .with_environment(capture_environment()?);
+    }
+    Ok(baseline)
+}
+
+fn run_report(args: ReportArgs) -> Result<()> {
+    let graph = collect_graph(args.manifest_path.as_ref())
+        .context("failed to collect cargo metadata for the report")?;
 
     let report = Report::diagnose(&graph);
     match args.format {
@@ -262,7 +368,44 @@ fn run_report(args: ReportArgs) -> Result<()> {
             println!("{json}");
         }
     }
+
+    if let Some(path) = &args.save_baseline {
+        // Reuse the graph already collected for the report.
+        let baseline = snapshot_from_graph(&graph, args.timings.as_ref())?;
+        baseline
+            .save(path)
+            .with_context(|| format!("failed to save baseline to `{}`", path.display()))?;
+        eprintln!("saved baseline to {}", path.display());
+    }
     Ok(())
+}
+
+fn run_check(args: CheckArgs) -> Result<ExitCode> {
+    let baseline = Baseline::load(&args.baseline).with_context(|| {
+        format!(
+            "failed to load baseline `{}` (run `cargo clinic report --save-baseline {}` first)",
+            args.baseline.display(),
+            args.baseline.display()
+        )
+    })?;
+    let graph = collect_graph(args.manifest_path.as_ref())
+        .context("failed to collect cargo metadata for the check")?;
+    let current = snapshot_from_graph(&graph, args.timings.as_ref())?;
+    let check = baseline.check(&current, args.timing_threshold_percent);
+
+    if args.json {
+        let json = serde_json::to_string_pretty(&check.view())
+            .context("failed to serialize check result as JSON")?;
+        println!("{json}");
+    } else {
+        print!("{}", check.render());
+    }
+
+    if check.is_regression() {
+        Ok(ExitCode::from(EXIT_REGRESSION))
+    } else {
+        Ok(ExitCode::SUCCESS)
+    }
 }
 
 /// Normalize argv so clap sees a clean argument list whether we were called as

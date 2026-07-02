@@ -1,0 +1,32 @@
+# cargo-clinic CI regression gate.
+#
+# Copy this into `.github/workflows/cargo-clinic.yml`. It fails the build when a
+# pull request introduces a new duplicate version or a new heavy dependency
+# (proc-macro / build.rs) compared to a baseline committed at
+# `.cargo-clinic/baseline.json`.
+#
+# Generate and commit the baseline once, from a clean main checkout:
+#
+#     cargo install cargo-clinic
+#     cargo clinic report --save-baseline .cargo-clinic/baseline.json
+#     git add .cargo-clinic/baseline.json && git commit -m "chore: add cargo-clinic baseline"
+#
+# Timing comparison is intentionally OFF here: hosted CI runners are noisy and
+# their toolchain changes often, which would auto-skip timing anyway. Run
+# `cargo clinic measure` locally and pass `--timings` if you want it.
+name: cargo-clinic
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build-health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-clinic
+        run: cargo install cargo-clinic --locked
+      - name: Check build health against baseline
+        run: cargo clinic check --baseline .cargo-clinic/baseline.json

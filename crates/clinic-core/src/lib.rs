@@ -7,8 +7,12 @@
 //! and the experimental nightly `--timings=json` import.
 //! Issue #4 adds the prescriber + report: ranked, prescriptive findings with
 //! qualitative impact, rendered as table / JSON / markdown.
+//! Issue #5 adds the baseline snapshot + `cargo clinic check` regression gate:
+//! a saved baseline compared against a fresh snapshot, failing CI on new
+//! duplicates / heavy deps or a noise-aware timing regression.
 
 mod analyzers;
+mod baseline;
 mod collector;
 mod duplicates;
 mod error;
@@ -18,6 +22,12 @@ mod prescriber;
 mod timing;
 
 pub use analyzers::{BuildScriptCrate, DefaultFeaturesOpportunity, ProcMacroCrate};
+pub use baseline::{
+    Baseline, BaselineError, CheckReport, CheckReportView, CrateTimingSnapshot,
+    DuplicateRegression, DuplicateSnapshot, EnvironmentFingerprint, HeavyDepKind, HeavyDepSnapshot,
+    TimingComparison, TimingRegression, TimingSnapshot, BASELINE_SCHEMA_VERSION,
+    DEFAULT_TIMING_THRESHOLD_PERCENT, TOTAL_SCOPE,
+};
 pub use collector::MetadataCollector;
 pub use duplicates::{DuplicateInstance, DuplicatePackage};
 pub use error::CollectError;
